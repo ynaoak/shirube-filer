@@ -1,0 +1,7 @@
+id: s3
+name: S3 Browser
+version: "1.0.0"
+description: AWS S3 およびS3互換ストレージ（MinIO・Cloudflare R2など）のファイルを閲覧・転送する
+author: shirube-filer contributors
+license: MIT
+entry_ui: ui/index.js

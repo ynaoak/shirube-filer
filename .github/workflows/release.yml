@@ -1,0 +1,223 @@
+name: Release
+
+# v* タグの push で Windows / macOS (arm64・x64) / Linux をビルドし、
+# 自動アップデート用の署名（.sig）と latest.json を付けて Release を公開する。
+# タグは開発リポジトリの scripts/release-public.ps1 が打つ。
+# 途中で失敗したら Actions の "Run workflow" に同じタグを入れて再実行できる
+# （既存の draft Release を再利用し、添付は上書きする）。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "リリースするタグ（例: v1.0.0）"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  # 各ビルドが同じ Release に添付できるよう、先に draft を 1 つだけ作る。
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.release.outputs.id }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ env.TAG }}
+
+      # タグと package.json / tauri.conf.json / Cargo.toml の version 一致を確認
+      - name: Verify tag matches app versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          V="${TAG#v}"
+          PKG=$(node -p "require('./desktop/package.json').version")
+          TAURI=$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")
+          CARGO=$(grep -m1 '^version' desktop/src-tauri/Cargo.toml | sed -E 's/version *= *"([^"]+)"/\1/')
+          echo "tag=$V package.json=$PKG tauri.conf.json=$TAURI Cargo.toml=$CARGO"
+          if [ "$V" != "$PKG" ] || [ "$V" != "$TAURI" ] || [ "$V" != "$CARGO" ]; then
+            echo "::error::version mismatch between tag and app files"
+            exit 1
+          fi
+
+      - name: Create (or reuse) draft release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
+          if [ -z "$id" ]; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+              --title "shirube-filer $TAG" --notes-file - <<'EOF'
+          お使いの OS に合ったファイルをダウンロードしてください。インストーラ版はアプリ内から自動アップデートできます。
+
+          | OS | ファイル | 用途 |
+          | --- | --- | --- |
+          | Windows | `*-setup.exe` | インストーラ（推奨） |
+          | Windows | `*.msi` | MSI インストーラ |
+          | Windows | `*portable.zip` | ポータブル版（自動アップデートなし） |
+          | macOS (Apple Silicon) | `*_aarch64.dmg` | ディスクイメージ |
+          | macOS (Intel) | `*_x64.dmg` | ディスクイメージ |
+          | Linux | `*.AppImage` / `*.deb` / `*.rpm` | AppImage 推奨 |
+
+          コード署名をしていないため、初回起動時に OS の警告が出ることがあります。
+          EOF
+            id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: create-release
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rustTarget: ""
+            args: ""
+          - os: macos-latest
+            rustTarget: aarch64-apple-darwin
+            args: "--target aarch64-apple-darwin"
+          - os: macos-latest
+            rustTarget: x86_64-apple-darwin
+            args: "--target x86_64-apple-darwin"
+          - os: ubuntu-22.04
+            rustTarget: ""
+            args: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ env.TAG }}
+
+      # Tauri v2 のシステム依存（WebKitGTK 4.1 / D-Bus 等）
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev librsvg2-dev patchelf build-essential file \
+            libssl-dev libgtk-3-dev libayatana-appindicator3-dev libdbus-1-dev
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rustTarget }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./desktop/src-tauri -> target"
+          key: ${{ matrix.os }}-${{ matrix.rustTarget }}
+
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
+
+      # 署名鍵が無いと .sig / latest.json が作れず、利用者に自動アップデートが届かない
+      - name: Check updater signing secret
+        shell: bash
+        env:
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          if [ "$HAS_KEY" != "true" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is not set"
+            exit 1
+          fi
+
+      - name: Build and upload to the draft release
+        uses: tauri-apps/tauri-action@fce9c6108b31ea247710505d3aaaa893ee6768d4 # v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # クラウド連携の OAuth クライアント（Rust 側で option_env! により埋め込み）
+          SHIRUBE_GDRIVE_CLIENT_ID: ${{ secrets.SHIRUBE_GDRIVE_CLIENT_ID }}
+          SHIRUBE_GCS_CLIENT_ID: ${{ secrets.SHIRUBE_GCS_CLIENT_ID }}
+          SHIRUBE_BOX_CLIENT_ID: ${{ secrets.SHIRUBE_BOX_CLIENT_ID }}
+          SHIRUBE_BOX_CLIENT_SECRET: ${{ secrets.SHIRUBE_BOX_CLIENT_SECRET }}
+          SHIRUBE_ONEDRIVE_CLIENT_ID: ${{ secrets.SHIRUBE_ONEDRIVE_CLIENT_ID }}
+          SHIRUBE_DROPBOX_APP_KEY: ${{ secrets.SHIRUBE_DROPBOX_APP_KEY }}
+        with:
+          projectPath: desktop
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          # latest.json は最後の finalize ジョブで形式別キー付きで作り直す
+          includeUpdaterJson: false
+          args: --config src-tauri/tauri.updater.conf.json ${{ matrix.args }}
+
+      # draft Release はタグ名での参照が効かない場合があるため、ID 指定の API で添付する
+      - name: Attach Windows portable zip
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          zip="shirube-filer_${TAG#v}_x64-portable.zip"
+          pwsh -NoProfile -Command "Compress-Archive -Path desktop/src-tauri/target/release/shirube-filer.exe -DestinationPath $zip -Force"
+          old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" --jq ".[] | select(.name == \"$zip\") | .id")
+          if [ -n "$old" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"; fi
+          gh api -X POST -H "Content-Type: application/zip" --input "$zip" \
+            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$zip" > /dev/null
+
+  # 全 OS の添付が揃ってから latest.json を作り、Release を公開する。
+  finalize:
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Build latest.json and publish the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          api="repos/$GITHUB_REPOSITORY/releases"
+          gh api "$api/$RELEASE_ID/assets?per_page=100" > assets.json
+          jq -r '.[].name' assets.json > assets.txt
+          mkdir -p sigs
+          jq -r '.[] | select(.name | endswith(".sig")) | "\(.id) \(.name)"' assets.json |
+            while read -r id name; do
+              gh api -H "Accept: application/octet-stream" "$api/assets/$id" > "sigs/$name"
+            done
+          node .github/scripts/update-manifest.mjs --repo "$GITHUB_REPOSITORY" --tag "$TAG" \
+            --sigs sigs --assets-list assets.txt --out latest.json
+          old=$(jq -r '.[] | select(.name == "latest.json") | .id' assets.json)
+          if [ -n "$old" ]; then gh api -X DELETE "$api/assets/$old"; fi
+          gh api -X POST -H "Content-Type: application/json" --input latest.json \
+            "https://uploads.github.com/$api/$RELEASE_ID/assets?name=latest.json" > /dev/null
+          gh api -X PATCH "$api/$RELEASE_ID" -F draft=false -f make_latest=true > /dev/null
+          echo "published: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"

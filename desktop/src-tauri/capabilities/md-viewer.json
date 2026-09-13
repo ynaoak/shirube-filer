@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "md-viewer",
+  "description": "Capability for markdown viewer windows (md-viewer-*)",
+  "windows": ["md-viewer-*"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:allow-close",
+    "core:window:allow-set-focus"
+  ]
+}

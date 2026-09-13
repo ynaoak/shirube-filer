@@ -1,0 +1,26 @@
+# dependencies / build output
+node_modules
+dist
+dist-ssr
+target/
+*.local
+*.log
+
+# Tauri generated schemas
+desktop/src-tauri/gen/schemas
+
+# local build-time secrets (OAuth clients). See desktop/src-tauri/.cargo/config.toml.example
+desktop/src-tauri/.cargo/config.toml
+
+# E2E (Playwright) run artifacts
+desktop/e2e/reports/
+desktop/test-results/
+desktop/playwright-report/
+
+# editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.sw?

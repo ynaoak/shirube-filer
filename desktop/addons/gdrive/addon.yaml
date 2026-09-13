@@ -1,0 +1,7 @@
+id: gdrive
+name: Google Drive
+version: "1.0.0"
+description: Google Drive のファイルを閲覧・転送する（OAuth 2.0 PKCE 認証）
+author: shirube-filer contributors
+license: MIT
+entry_ui: ui/index.js

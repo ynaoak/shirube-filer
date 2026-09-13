@@ -1,0 +1,934 @@
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+@import "material-symbols/rounded.css";
+/* Noto Sans（同梱）の @font-face は main.tsx から JS import で読み込む。
+ * Tailwind v4 の CSS @import リゾルバは fontsource の exports パターン
+ * （"./*.css"）を一部環境（Windows）で解決できずビルドが失敗するため、
+ * Vite が確実に解決できる JS import 側へ移している。 */
+
+/* ── アプリ標準フォント（Noto Sans 同梱） ────────────────────────────
+ * ラテン: Noto Sans Variable / 日本語: Noto Sans JP Variable
+ * 同梱フォントが読めない万一の場合は OS 標準フォントへフォールバックする。
+ */
+html, body, #root, button, input, select, textarea {
+  font-family: "Noto Sans Variable", "Noto Sans JP Variable",
+    "Noto Sans", "Noto Sans JP", "Segoe UI Variable Text", "Segoe UI",
+    -apple-system, BlinkMacSystemFont, system-ui, "Hiragino Sans",
+    "Yu Gothic UI", "Meiryo", sans-serif;
+  font-feature-settings: "cv01", "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* OS-aware accent color for native form controls (checkbox, radio, range) */
+:root {
+  accent-color: var(--kf-accent);
+  color-scheme: dark;
+}
+html:not(.dark) {
+  color-scheme: light;
+}
+
+/* Native text selection — accent-tinted */
+::selection {
+  background-color: color-mix(in srgb, var(--kf-accent) 35%, transparent);
+  color: var(--kf-text-primary);
+}
+
+select {
+  cursor: pointer;
+}
+
+/* Material Symbols: compact size */
+.material-symbols-rounded {
+  font-size: 16px;
+  line-height: 1;
+  user-select: none;
+  vertical-align: middle;
+}
+
+/* Enable class-based dark mode for Tailwind v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Default theme variables (Shirube Dark) – overridden by ThemeProvider at runtime.
+ * 起動直後のフラッシュを防ぐため、既定テーマ shirube-dark と同じニュートラル背景＋水色アクセントに揃える。 */
+:root {
+  --kf-bg-primary:    #17191D;
+  --kf-bg-secondary:  #1E2127;
+  --kf-bg-tertiary:   #2A2E35;
+  --kf-border:        #353A42;
+  --kf-border-soft:   #23272E;
+  --kf-text-primary:  #F2F4F7;
+  --kf-text-secondary:#BAC1CB;
+  --kf-text-muted:    #8E97A1;
+  --kf-accent:           #7DD3FC;
+  --kf-accent-fg:        #08334A;
+  --kf-window-title-bg:  #17191D;
+  --kf-scrollbar-thumb:  #353A42;
+  --kf-scrollbar-track:  #1E2127;
+}
+
+/* ── 選択行の塗り ────────────────────────────────────────────────────
+ * ツリーと一覧で「選ばれている行」を示す色。アクセントをそのまま敷くと、
+ * 淡いアクセントのテーマでは上に載せた白い文字とアイコンが沈む。既定の
+ * Shirube Dark（#7DD3FC）では白とのコントラストが 1.67:1 しかなく、
+ * 17 テーマ中 12 テーマが本文の基準 4.5:1 を割っていた。
+ *
+ * テーマごとに色を用意しないのは、アクセントがテーマ固定ではないため。
+ * ユーザー定義テーマと「OS のアクセントカラーを使う」設定があり、任意の
+ * 色が入りうる。そこでアクセントを黒側へ寄せて濃さを揃え、その上に白を置く。
+ *
+ * 混合率 30% は、白文字とファイル種別アイコンの両方が成り立つ上限として
+ * 全 17 テーマで計算して決めた値。種別アイコン（画像=紫、動画=赤 など）は
+ * 中間調なので、塗りも中間調だと沈む。50% では白は 5.08:1 で足りる一方
+ * アイコンが 1.72:1 まで落ちた。30% なら白 8.96:1・アイコン 3.02:1 で、
+ * 本文の 4.5:1 と非テキストの 3:1 を両方満たす。これ以上薄くすると
+ * アイコンが再び沈むため、アクセントの色味を残せる限界がここになる。
+ *
+ * accent-fg は使わない。テーマによっては未定義で、切り替え時に前のテーマの
+ * 値が残ることがあるため、選択行の可読性をそこに依存させない。 */
+:root {
+  --kf-sel-bg: color-mix(in srgb, var(--kf-accent) 30%, #0A1420);
+  --kf-sel-fg: #FFFFFF;
+  /* 選択行の中で控えめに見せたい文字（サイズ・更新日など）。 */
+  --kf-sel-fg-muted: color-mix(in srgb, #FFFFFF 78%, transparent);
+}
+
+/* ── 選択行の中だけ種別色をダーク用に切り替える ──────────────────────
+ * ファイル種別アイコンの色は背景の明るさに合わせて 2 組ある（ライトでは濃色、
+ * ダークでは明色）。選択行はテーマに関係なく濃い塗りなので、ライトテーマの
+ * 濃色をそのまま載せると沈む（例: 画像の #7c3aed は 1.77:1）。
+ *
+ * 選択行の中でだけトークンを明色側へ差し替える。FileIcon は var() で読んで
+ * いるので、コンポーネントに手を入れずに継承で切り替わる。 */
+[role="option"][aria-selected="true"],
+[data-tree-exact="true"] {
+  --kf-ft-image:   #a78bfa;
+  --kf-ft-video:   #f87171;
+  --kf-ft-audio:   #34d399;
+  --kf-ft-archive: #fbbf24;
+  --kf-ft-code:    #60a5fa;
+  /* 種別色を持たないファイル（テキスト・不明）のアイコンにも使われる。 */
+  --kf-text-secondary: #D7DCE3;
+  --kf-text-muted:     #AEB6C0;
+}
+
+/* ── Semantic status colors ──────────────────────────────────────────
+ * 成功 / 警告 / エラー / 情報 のステータス色をトークン化。
+ * コンポーネント側のアドホックな #22c55e / #ef4444 等はこれらに統一する。
+ * 用途はステータス表示（トースト・キュー・検証エラー・危険操作ボタン等）。
+ * ファイル種別アイコン・カラーラベル・ターミナル ANSI・Git/diff の配色は
+ * 「カテゴリ色」であり別物のため、ここには含めない。
+ *
+ * 色味はテーマに依らない（テーマの個性はアクセントのみ）が、**明るさは背景に
+ * 合わせないと読めない**。以前は明るい緑/橙を固定で置いていたため、白基調の
+ * ライト系テーマでは全 17 テーマ中 13 テーマが非テキストの 3:1 すら割っていた
+ * （#22c55e は Shirube Light の bg-secondary に対して 2.11:1。組み込みサーバー
+ * 起動の成功トーストで、左帯とアイコンがほとんど見えない状態だった）。
+ * そこで種別アイコン（--kf-ft-*）と同じ作りにして、ライトでは濃いめ・
+ * ダークでは明るめに切り替える。
+ *
+ * 採用値はどのテーマの bg-primary / secondary / tertiary に対しても 4.5:1 以上。
+ * 帯やアイコン（非テキスト）は 3:1 で足りるが、同じトークンを文字色にも使う
+ * （FolderCompare の件数、危険操作ボタン等）ため本文基準で選んでいる。
+ *
+ * info はアクセントの色味を使うが、アクセントは淡いこともある（ユーザー定義
+ * テーマ・OS アクセント連動）。そのままでは catppuccin で 2.58:1 まで落ちるので、
+ * テキスト色側へ 30% 寄せて最悪 4.54:1 に持ち上げる。選択行の --kf-sel-bg と
+ * 同じ考え方で、色味を残しつつ明るさだけ揃える。 */
+:root {
+  --kf-success:    #166534;
+  --kf-warning:    #92400e;
+  --kf-error:      #b91c1c;
+  --kf-info:       color-mix(in srgb, var(--kf-accent) 70%, var(--kf-text-primary));
+  --kf-success-bg: #14532d;
+  --kf-error-bg:   #7f1d1d;
+}
+.dark {
+  --kf-success:    #22c55e;
+  --kf-warning:    #f59e0b;
+  --kf-error:      #f87171;
+}
+
+/* ── File-type icon colors (theme-adaptive for contrast) ─────────────
+ * FileIcon の種別色。固定の淡い色だとライトモード（白背景）でコントラスト
+ * 不足になるため、ライトでは濃いめ、ダークでは明るめに切り替える。
+ * 既定（ライト系テーマ）の値を :root に、ダークテーマ（html.dark）で上書き。 */
+:root {
+  --kf-ft-image:   #7c3aed;
+  --kf-ft-video:   #dc2626;
+  --kf-ft-audio:   #059669;
+  --kf-ft-archive: #b45309;
+  --kf-ft-code:    #2563eb;
+}
+.dark {
+  --kf-ft-image:   #a78bfa;
+  --kf-ft-video:   #f87171;
+  --kf-ft-audio:   #34d399;
+  --kf-ft-archive: #fbbf24;
+  --kf-ft-code:    #60a5fa;
+}
+
+/* ── Native-style scrollbars ─────────────────────────────────────────
+ * デフォルト（Windows / Linux）: Fluent 風の細い常時表示。
+ * macOS: 後段の `body.kf-os-macos` セレクタで「ホバー時のみ表示」に切替。
+ */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--kf-scrollbar-thumb);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+  min-height: 32px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--kf-text-muted) 60%, var(--kf-scrollbar-thumb));
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* macOS: overlay 風（コンテナにホバー or スクロール中だけ表示） */
+body.kf-os-macos ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+body.kf-os-macos ::-webkit-scrollbar-thumb {
+  background: transparent;
+  transition: background 160ms ease;
+}
+body.kf-os-macos *:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--kf-text-muted) 35%, transparent);
+  background-clip: padding-box;
+}
+body.kf-os-macos *:hover::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--kf-text-muted) 60%, transparent);
+  background-clip: padding-box;
+}
+
+/* Force grabbing cursor on all elements during drag */
+body.kf-dragging,
+body.kf-dragging * {
+  cursor: grabbing !important;
+}
+
+/* タブ / グループのドラッグ中にカーソルへ追従するゴースト（lib/dragGhost.ts が生成） */
+.kf-drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9999;
+  pointer-events: none;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  background-color: color-mix(in srgb, var(--kf-bg-tertiary) 88%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: var(--kf-text-primary);
+  border: 1px solid var(--kf-accent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  opacity: 0.9;
+  white-space: nowrap;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Theme-aware base styles */
+#root {
+  background-color: var(--kf-bg-primary);
+  color: var(--kf-text-primary);
+}
+
+/* Toolbar button using theme variables */
+.toolbar-btn {
+  @apply px-2 py-1 rounded-md transition-all text-xs flex items-center gap-1;
+  background-color: transparent;
+  color: var(--kf-text-secondary);
+  position: relative;
+  min-height: 28px;
+}
+.toolbar-btn:hover {
+  background-color: var(--kf-bg-tertiary);
+  color: var(--kf-text-primary);
+}
+.toolbar-btn.active {
+  background-color: var(--kf-accent);
+  color: var(--kf-accent-fg, #fff);
+}
+
+/* Custom tooltip — native-style: ほぼ黒の濃色背景、細い影、ふんわり表示。
+ * OS ネイティブのツールチップに寄せて視認性とコントラストを上げる。 */
+.toolbar-btn[title]::after {
+  content: attr(title);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(2px);
+  background-color: color-mix(in srgb, var(--kf-bg-primary) 92%, #000);
+  color: var(--kf-text-primary);
+  border: 1px solid var(--kf-border);
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease 0.15s, transform 0.12s ease 0.15s;
+  z-index: 9999;
+  box-shadow:
+    0 4px 14px -4px rgba(0, 0, 0, 0.5),
+    0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.toolbar-btn[title]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  transition: opacity 0.12s ease 0.4s, transform 0.12s ease 0.4s;
+}
+.toolbar-separator {
+  width: 1px;
+  height: 16px;
+  background-color: var(--kf-border);
+  flex-shrink: 0;
+}
+
+/* Shimmer skeleton */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--kf-bg-secondary) 25%,
+    var(--kf-bg-tertiary)  50%,
+    var(--kf-bg-secondary) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 3px;
+}
+
+/* ── Motion system: entrance animations ──────────────────────────────
+ * ネイティブの OS は浮き上がるサーフェスを「わずかに拡大しながらフェードイン」
+ * させる。イージングは macOS/Windows のスプリング風（出だしが速く、終端で減速）
+ * に寄せた cubic-bezier(0.16, 1, 0.3, 1)。持続は 120-160ms に収め、
+ * 体感速度を損なわないようにする。
+ */
+@keyframes kf-pop-in {
+  from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+@keyframes kf-scale-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes kf-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.kf-anim-pop   { animation: kf-pop-in   130ms cubic-bezier(0.16, 1, 0.3, 1); }
+.kf-anim-scale { animation: kf-scale-in 150ms cubic-bezier(0.16, 1, 0.3, 1); }
+.kf-anim-fade  { animation: kf-fade-in  130ms ease-out; }
+
+button {
+  cursor: pointer;
+}
+
+/* ── Native focus ring ───────────────────────────────────────────────
+ * マウスクリック後の青枠を抑え、キーボードフォーカス時のみアクセント色のリングを出す。
+ * OS ネイティブのキーボードナビゲーション挙動に近づける。
+ */
+button:focus,
+input:focus,
+select:focus,
+textarea:focus,
+[tabindex]:focus {
+  outline: none;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--kf-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* テキスト入力はアクセント色の薄いボーダーに */
+input[type="text"]:focus-visible,
+input[type="search"]:focus-visible,
+input[type="number"]:focus-visible,
+input[type="password"]:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: var(--kf-accent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--kf-accent) 25%, transparent);
+}
+
+/* ── Native-feel transitions ─────────────────────────────────────────
+ * OS ネイティブの hover/active トランジションは 100-180ms。
+ * グローバルではなく頻出インタラクションだけ揃える。
+ */
+.kf-native-hover {
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+.kf-native-hover:active {
+  transform: translateY(0.5px);
+}
+
+/* ── Native menu / popover surfaces ──────────────────────────────────
+ * コンテキストメニュー、ドロップダウン、フローティングパネル等の浮き上がる
+ * サーフェスの見た目を統一する。macOS/Windows ともネイティブメニューは
+ *  - 8px の角丸
+ *  - 強めのドロップシャドウ + 細い枠線
+ *  - 内側 4px の余白でアイテムを並べる
+ *  - アイテム選択時はアクセント色 18% alpha（フル accent は強すぎる）
+ */
+.kf-surface-menu {
+  background-color: var(--kf-bg-secondary);
+  border: 1px solid var(--kf-border);
+  border-radius: 8px;
+  box-shadow:
+    0 8px 24px -8px rgba(0, 0, 0, 0.45),
+    0 2px 6px -2px rgba(0, 0, 0, 0.3),
+    0 0 0 0.5px rgba(255, 255, 255, 0.04);
+  transform-origin: top left;
+  animation: kf-pop-in 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.kf-menu-item {
+  border-radius: 5px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  margin-top: 1px;
+  margin-bottom: 1px;
+}
+.kf-menu-item:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--kf-accent) 18%, transparent);
+  color: var(--kf-text-primary);
+}
+.kf-menu-item:not(:disabled):active {
+  background-color: color-mix(in srgb, var(--kf-accent) 32%, transparent);
+}
+
+/* ── ダイアログフッター用の小型ボタン ─────────────────────────────────
+ * `.kf-btn` を土台に `.kf-btn-primary` / `.kf-btn-secondary` / `.kf-btn-danger`
+ * を重ねて使う（例: className="kf-btn kf-btn-primary"）。
+ * 既存の `.kf-btn-primary` 等（アイコン付きの大きめボタン、下の「Native-style
+ * buttons」セクション）とは用途が異なるため、`.kf-btn` との複合セレクタにして
+ * 衝突を避ける。
+ */
+.kf-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12px;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease, opacity 140ms ease;
+}
+.kf-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.kf-btn.kf-btn-primary { background-color: var(--kf-accent); color: var(--kf-accent-fg, #fff); }
+.kf-btn.kf-btn-primary:not(:disabled):hover { filter: brightness(1.08); }
+.kf-btn.kf-btn-secondary { border: 1px solid var(--kf-border); color: var(--kf-text-secondary); background: transparent; }
+.kf-btn.kf-btn-secondary:not(:disabled):hover { background-color: var(--kf-bg-tertiary); color: var(--kf-text-primary); }
+.kf-btn.kf-btn-danger { border: 1px solid var(--kf-border); color: var(--kf-error); background: transparent; }
+.kf-btn.kf-btn-danger:not(:disabled):hover { background-color: color-mix(in srgb, var(--kf-error) 12%, transparent); }
+
+/* ── タスクの実行ボタン ──────────────────────────────────────────────
+ * 「押せば動く」ことが一目で分かるように、行の左側だけの小さなボタンではなく
+ * 行全体を押せる面にして、先頭に丸い実行マークを置く。ホバーで選択色に塗り、
+ * 記号を白へ反転する。塗りは選択行と同じ --kf-sel-bg / --kf-sel-fg を使う
+ * （淡いアクセントでも沈まないよう黒側へ寄せたトークン）。
+ *
+ * 実行中の行は止める操作が主になるので、マークを停止色にする。こちらは塗りを
+ * 薄く敷くだけにする: ダークテーマの --kf-error は明るい赤で、白を載せると
+ * 2.4:1 まで落ちるため（危険操作ボタン .kf-btn-danger と同じ考え方）。 */
+.kf-task-row:hover {
+  background-color: var(--kf-bg-secondary);
+}
+.kf-run-chip {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--kf-border);
+  border-radius: 9999px;
+  color: var(--kf-text-secondary);
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.kf-task-row:hover .kf-run-chip,
+.kf-task-run:focus-visible .kf-run-chip {
+  background-color: var(--kf-sel-bg);
+  border-color: var(--kf-sel-bg);
+  color: var(--kf-sel-fg);
+}
+.kf-run-chip--running {
+  color: var(--kf-error);
+  border-color: color-mix(in srgb, var(--kf-error) 45%, transparent);
+}
+.kf-task-row:hover .kf-run-chip--running,
+.kf-task-run:focus-visible .kf-run-chip--running {
+  background-color: color-mix(in srgb, var(--kf-error) 18%, transparent);
+  border-color: var(--kf-error);
+  color: var(--kf-error);
+}
+.kf-task-run:disabled .kf-run-chip {
+  opacity: 0.4;
+}
+
+/* ── Modal backdrop & surface ────────────────────────────────────────
+ * macOS / Windows 11 のシステムダイアログに寄せる:
+ *  - backdrop は半透明＋軽い blur（Aero / vibrancy 風）
+ *  - ダイアログ本体は 12px 角丸 + 三段ドロップシャドウ
+ */
+.kf-backdrop {
+  background-color: rgba(0, 0, 0, 0.45);
+  backdrop-filter: saturate(140%) blur(6px);
+  -webkit-backdrop-filter: saturate(140%) blur(6px);
+  animation: kf-fade-in 140ms ease-out;
+}
+.kf-surface-modal {
+  background-color: var(--kf-bg-secondary);
+  border: 1px solid var(--kf-border);
+  border-radius: 12px;
+  box-shadow:
+    0 24px 48px -16px rgba(0, 0, 0, 0.55),
+    0 8px 20px -8px rgba(0, 0, 0, 0.35),
+    0 0 0 0.5px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  animation: kf-scale-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Native-style buttons ────────────────────────────────────────────
+ * primary: アクセント塗り、focus 時にリング
+ * secondary: 透明 + 細い border、hover で bg-tertiary
+ * ghost: 文字色のみ、hover で bg-tertiary
+ */
+.kf-btn-primary,
+.kf-btn-secondary,
+.kf-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease,
+    box-shadow 140ms ease, transform 80ms ease;
+  user-select: none;
+  white-space: nowrap;
+}
+.kf-btn-primary {
+  background-color: var(--kf-accent);
+  color: var(--kf-accent-fg, #fff);
+  border-color: color-mix(in srgb, #000 12%, var(--kf-accent));
+  box-shadow: 0 1px 0 0 color-mix(in srgb, var(--kf-accent) 50%, transparent),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.18);
+}
+.kf-btn-primary:hover {
+  background-color: color-mix(in srgb, #fff 8%, var(--kf-accent));
+}
+.kf-btn-primary:active {
+  background-color: color-mix(in srgb, #000 10%, var(--kf-accent));
+  transform: translateY(0.5px);
+}
+.kf-btn-secondary {
+  background-color: var(--kf-bg-tertiary);
+  color: var(--kf-text-primary);
+  border-color: var(--kf-border);
+}
+.kf-btn-secondary:hover {
+  background-color: color-mix(in srgb, var(--kf-text-primary) 8%, var(--kf-bg-tertiary));
+}
+.kf-btn-secondary:active {
+  transform: translateY(0.5px);
+}
+.kf-btn-ghost {
+  background-color: transparent;
+  color: var(--kf-text-secondary);
+}
+.kf-btn-ghost:hover {
+  background-color: var(--kf-bg-tertiary);
+  color: var(--kf-text-primary);
+}
+.kf-btn-primary:disabled,
+.kf-btn-secondary:disabled,
+.kf-btn-ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Native text input ───────────────────────────────────────────────
+ * 共通の input/textarea/select の見た目（既存スタイルを壊さないよう
+ * クラス指定時のみ適用）。
+ */
+.kf-input {
+  background-color: var(--kf-bg-primary);
+  border: 1px solid var(--kf-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--kf-text-primary);
+  outline: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.kf-input:hover:not(:focus) {
+  border-color: color-mix(in srgb, var(--kf-text-muted) 60%, var(--kf-border));
+}
+.kf-input:focus {
+  border-color: var(--kf-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--kf-accent) 22%, transparent);
+}
+.kf-input::placeholder {
+  color: var(--kf-text-muted);
+  opacity: 0.7;
+}
+
+/* ── Non-active window dimming（macOS/Windows ネイティブの挙動） ──── */
+body.kf-window-inactive .kf-window-title-text {
+  opacity: 0.55;
+}
+body.kf-window-inactive .kf-caption-btn {
+  opacity: 0.5;
+}
+/* macOS の traffic light は純正（titleBarStyle: "Overlay"）なので、
+ * 非アクティブ時のグレーアウトは OS 側が行う。ここでの上書きは不要。 */
+
+/* ── Toast notifications ─────────────────────────────────────────────
+ * 画面右下から滑り込み、残り時間をプログレスバーで可視化する。
+ * ホバー中は自動消去を一時停止（下の JS と連動）。
+ */
+@keyframes kf-toast-in {
+  from { opacity: 0; transform: translateX(16px) scale(0.96); }
+  to   { opacity: 1; transform: translateX(0)    scale(1); }
+}
+@keyframes kf-toast-out {
+  from { opacity: 1; transform: translateX(0)   scale(1); }
+  to   { opacity: 0; transform: translateX(16px) scale(0.96); }
+}
+@keyframes kf-toast-progress {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+.kf-toast {
+  animation: kf-toast-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.kf-toast--leaving {
+  animation: kf-toast-out 160ms ease-in forwards;
+}
+.kf-toast__progress {
+  transform-origin: left center;
+  animation: kf-toast-progress linear forwards;
+}
+.kf-toast:hover .kf-toast__progress {
+  animation-play-state: paused;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────────
+ * OS の「視差効果を減らす / アニメーションを減らす」設定を尊重する。
+ * 装飾的なモーションを無効化しつつ、機能（状態）を伝える要素は静止表示
+ * に落とす。前庭障害や乗り物酔いへの配慮（WCAG 2.3.3 / 2.2.2）。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .kf-toast__progress {
+    display: none;
+  }
+}
+
+/* ── Markdown プレビュー ───────────────────────────────────────────────
+ * マークダウン描画（QuickPreviewModal / PreviewPanel）のタイポグラフィ。
+ * @tailwindcss/typography は未導入のため、テーマ変数ベースで自前定義する。 */
+.kf-markdown {
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--kf-text-primary);
+  word-break: break-word;
+}
+.kf-markdown h1, .kf-markdown h2, .kf-markdown h3,
+.kf-markdown h4, .kf-markdown h5, .kf-markdown h6 {
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 1.4em 0 0.55em;
+  color: var(--kf-text-primary);
+}
+.kf-markdown h1 { font-size: 1.7em; padding-bottom: 0.25em; border-bottom: 1px solid var(--kf-border); }
+.kf-markdown h2 { font-size: 1.4em; padding-bottom: 0.2em; border-bottom: 1px solid var(--kf-border-soft); }
+.kf-markdown h3 { font-size: 1.2em; }
+.kf-markdown h4 { font-size: 1.05em; }
+.kf-markdown h1:first-child, .kf-markdown h2:first-child, .kf-markdown h3:first-child { margin-top: 0; }
+.kf-markdown p { margin: 0 0 0.9em; }
+.kf-markdown a { color: var(--kf-accent); text-decoration: none; }
+.kf-markdown a:hover { text-decoration: underline; }
+.kf-markdown ul, .kf-markdown ol { margin: 0 0 0.9em; padding-left: 1.6em; }
+.kf-markdown ul { list-style: disc; }
+.kf-markdown ol { list-style: decimal; }
+.kf-markdown li { margin: 0.2em 0; }
+.kf-markdown li > ul, .kf-markdown li > ol { margin-bottom: 0; }
+.kf-markdown code {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.88em;
+  background-color: var(--kf-bg-tertiary);
+  border: 1px solid var(--kf-border-soft);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+.kf-markdown pre {
+  background-color: var(--kf-bg-secondary);
+  border: 1px solid var(--kf-border-soft);
+  border-radius: 8px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  margin: 0 0 1em;
+}
+.kf-markdown pre code { background: none; border: none; padding: 0; font-size: 12px; line-height: 1.6; }
+.kf-markdown blockquote {
+  margin: 0 0 1em;
+  padding: 0.3em 1em;
+  border-left: 3px solid var(--kf-accent);
+  color: var(--kf-text-secondary);
+  background-color: color-mix(in srgb, var(--kf-accent) 6%, transparent);
+  border-radius: 0 6px 6px 0;
+}
+.kf-markdown blockquote p:last-child { margin-bottom: 0; }
+.kf-markdown table {
+  border-collapse: collapse;
+  margin: 0 0 1em;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.kf-markdown th, .kf-markdown td {
+  border: 1px solid var(--kf-border);
+  padding: 5px 10px;
+  text-align: left;
+}
+.kf-markdown th { background-color: var(--kf-bg-secondary); font-weight: 600; }
+.kf-markdown tr:nth-child(2n) td { background-color: color-mix(in srgb, var(--kf-bg-secondary) 55%, transparent); }
+.kf-markdown hr { border: none; border-top: 1px solid var(--kf-border); margin: 1.6em 0; }
+.kf-markdown img { max-width: 100%; border-radius: 6px; }
+.kf-markdown input[type="checkbox"] { margin-right: 0.4em; }
+
+/* ── コードビュー（テキストプレビュー・プレーン表示） ──────────────────
+ * プレーン表示（非ハイライト時・shiki 失敗時のフォールバック）の背景色。
+ * 既定はエディタモード（monaco vs-dark）と同じ「黒背景・白文字」。
+ * 設定（プレビュー > テキストプレビューの配色）で「アプリテーマに従う」も
+ * 選べる。ハイライト表示（.kf-shiki）は shiki が生成する HTML にインライン
+ * スタイルとして色が焼き込まれるため、ここでの --hl-kw 等のトークン色は
+ * プレーン表示では参照されない（bg/fg のみ有効）。 */
+.kf-code-view {
+  /* ダーク固定（既定）: github-dark 系パレット */
+  --hl-bg: #1E1E1E;
+  --hl-fg: #D4D4D4;
+  --hl-kw: #ff7b72;
+  --hl-str: #a5d6ff;
+  --hl-cmt: #8b949e;
+  --hl-num: #79c0ff;
+  --hl-fn: #d2a8ff;
+  --hl-type: #ffa657;
+  --hl-attr: #79c0ff;
+  --hl-meta: #d2a8ff;
+  background-color: var(--hl-bg);
+  color: var(--hl-fg);
+}
+/* アプリテーマ追従: ライトでは GitHub light 系、ダークでは上記と同じ */
+.kf-code-view.kf-code-follow {
+  --hl-bg: var(--kf-bg-primary);
+  --hl-fg: var(--kf-text-primary);
+  --hl-kw: #d73a49;
+  --hl-str: #032f62;
+  --hl-cmt: #6a737d;
+  --hl-num: #005cc5;
+  --hl-fn: #6f42c1;
+  --hl-type: #e36209;
+  --hl-attr: #005cc5;
+  --hl-meta: #6f42c1;
+}
+.dark .kf-code-view.kf-code-follow {
+  --hl-kw: #ff7b72;
+  --hl-str: #a5d6ff;
+  --hl-cmt: #8b949e;
+  --hl-num: #79c0ff;
+  --hl-fn: #d2a8ff;
+  --hl-type: #ffa657;
+  --hl-attr: #79c0ff;
+  --hl-meta: #d2a8ff;
+}
+.kf-code-view code { background: transparent; color: inherit; }
+
+/* ── コードビュー（テキストプレビュー・shiki ハイライト表示） ──────────
+ * shiki の codeToHtml() は <pre class="shiki THEME" style="background-color:...;color:...">
+ * を丸ごと出力し、各トークンの色もインライン style で焼き込まれる。
+ * ここでは余白・フォント・スクロールなど「入れ物」側のスタイルのみを当てる。 */
+/* pre 側の min-height: 100% は親（.kf-shiki）の高さが auto のため解決されない。
+ * ラッパーを縦 flex にし、pre を flex: 1 で引き伸ばして、短いファイルでも
+ * テーマ背景色がスクロール領域全体を満たすようにする。 */
+.kf-shiki { min-height: 100%; display: flex; flex-direction: column; }
+.kf-shiki pre.shiki {
+  margin: 0;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+  flex: 1;
+  border-radius: 0;
+}
+.kf-shiki pre.shiki code {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+/* マークダウンのダーク固定モード（既定はアプリテーマ追従）。
+ * スコープ内で --kf 変数を上書きしてダーク配色を強制する。 */
+.kf-markdown.kf-md-dark {
+  --kf-text-primary: #F2F4F7;
+  --kf-text-secondary: #BAC1CB;
+  --kf-bg-secondary: #1E2127;
+  --kf-bg-tertiary: #2A2E35;
+  --kf-border: #353A42;
+  --kf-border-soft: #23272E;
+  --kf-accent: #7DD3FC;
+  background-color: #17191D;
+  color: var(--kf-text-primary);
+  color-scheme: dark;
+}
+
+/* ── UI スタイル: Windows 11 標準エクスプローラー風 ────────────────────
+ * テーマ（themeStore の uiStyle: "win11"）を選ぶと root に
+ * data-ui-style="win11" が付き、配色に加えて「形状と階層」もここで切り替わる。
+ *
+ * 純正のエクスプローラーは全面フラットではなく、Mica のウィンドウ面の上に
+ * コンテンツ面（白いカード）が乗る二層構造になっている。ツールバーやアドレス
+ * バーはウィンドウ面に置かれ、ファイル一覧だけが一段手前に浮く。この「面の
+ * 分離」を作らないと、角丸を足しただけでは純正らしさが出ない。
+ *
+ * ここで再現するもの:
+ *   - ウィンドウ面（Mica）とコンテンツ面（カード）の二層構造
+ *   - 一覧の選択は左右をわずかに詰めた角丸のピル
+ *   - Fluent のコントロール質感（角丸・下線アクセント・ホバーの塗り）
+ *   - 行間の罫線を使わず、余白で区切る
+ *   - 細いスクロールバー
+ *
+ * 対象要素はインラインスタイルを持つものがあり、その打ち消しに限って
+ * !important を使う（配色は CSS 変数側で解決するのでここでは触らない）。
+ */
+
+/* ── 二層構造 ───────────────────────────────────────────────────────
+ * ペインの地をウィンドウ面（Mica 相当）にし、その上でコンテンツ面を浮かせる。 */
+[data-ui-style="win11"] [data-testid="file-list"] {
+  /* ペインのルートはインラインで bg-primary を持つため、打ち消して地を作る。 */
+  background-color: var(--kf-bg-secondary) !important;
+}
+
+/* コンテンツ面（列ヘッダー＋一覧本体）。純正と同じく上側だけ角丸にして、
+ * ウィンドウ面との境目に細い枠と淡い影を置く。これがフラット感を消す要。 */
+[data-ui-style="win11"] [data-file-content] {
+  background-color: var(--kf-bg-primary);
+  border: 1px solid var(--kf-border);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  margin: 0 1px;
+  box-shadow: 0 -1px 2px -1px rgb(0 0 0 / 0.06);
+  overflow: hidden;
+}
+
+/* ── 一覧の行 ───────────────────────────────────────────────────────
+ * 選択は左右をわずかに詰めた角丸のピル。純正の詳細ビューは左端の縦バーを
+ * 使わないので、既定デザインの inset シャドウは打ち消す。 */
+[data-ui-style="win11"] [role="option"] {
+  border-radius: 4px;
+  margin: 0 4px;
+  box-shadow: none !important;
+  border-bottom: none !important;
+}
+
+/* ── タブ ───────────────────────────────────────────────────────────
+ * 上側だけ角丸。非選択の縦罫線は使わない。 */
+[data-ui-style="win11"] [data-tab-id] {
+  border-radius: 6px 6px 0 0;
+  box-shadow: none !important;
+}
+/* グループタブは全周角丸のピル。 */
+[data-ui-style="win11"] [data-group-id] {
+  border-radius: 6px;
+}
+
+/* ── Fluent のコントロール質感 ──────────────────────────────────────
+ * 純正のボタンは角丸で、ホバー時にだけ淡く塗られる。枠線は常時は出さない。 */
+[data-ui-style="win11"] button {
+  border-radius: 4px;
+}
+
+/* テキスト入力（検索・パス）。Fluent の TextBox は角丸＋下端だけ濃い線で、
+ * フォーカスするとその線がアクセント色になる。この下線が Win11 らしさを出す。 */
+[data-ui-style="win11"] input[type="text"],
+[data-ui-style="win11"] input:not([type]),
+[data-ui-style="win11"] input[type="search"] {
+  border-radius: 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--kf-text-muted) 55%, var(--kf-border));
+}
+[data-ui-style="win11"] input[type="text"]:focus,
+[data-ui-style="win11"] input:not([type]):focus,
+[data-ui-style="win11"] input[type="search"]:focus {
+  border-bottom: 2px solid var(--kf-accent);
+  outline: none;
+}
+
+/* ── メニュー / ポップオーバー ──────────────────────────────────────
+ * Win11 の角丸は一段大きく、影も柔らかい。 */
+[data-ui-style="win11"] .kf-surface-menu {
+  border-radius: 8px;
+}
+
+/* ── スクロールバー ─────────────────────────────────────────────────
+ * Win11 は細く、つまみも控えめ。 */
+[data-ui-style="win11"] ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+[data-ui-style="win11"] ::-webkit-scrollbar-thumb {
+  border: 4px solid transparent;
+  border-radius: 8px;
+}
+
+/* ── ナビゲーションペイン（左のツリー） ─────────────────────────────
+ * 純正のナビゲーションペインは、選択項目を全幅のベタ塗りではなく
+ * 左右を詰めた角丸のピルで示し、色もアクセントのベタ塗りではなく
+ * 淡いアクセント面＋通常の文字色にする。左端に短い縦バーが付く。 */
+/* Win11 スタイルでも塗りは濃い選択色に揃える。以前は 16% の淡い塗りに
+ * していたが、行の中のフォルダアイコンは白で描かれるため沈んでいた。
+ * 角丸・左右の余白・左端のバーという Win11 らしい「形」はそのまま残す。 */
+[data-ui-style="win11"] [data-tree-exact="true"] {
+  background-color: var(--kf-sel-bg) !important;
+  color: var(--kf-sel-fg) !important;
+  border-radius: 4px;
+  margin: 0 4px;
+  box-shadow: inset 3px 0 0 -1px var(--kf-accent);
+}

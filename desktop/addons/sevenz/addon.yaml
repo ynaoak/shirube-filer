@@ -1,0 +1,7 @@
+id: sevenz
+name: 7-Zip
+version: "1.0.0"
+description: 7-Zipを使用した圧縮・解凍（外部バイナリ必須）
+author: shirube-filer contributors
+license: MIT
+entry_ui: ui/index.js

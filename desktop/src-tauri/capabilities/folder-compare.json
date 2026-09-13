@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "folder-compare",
+  "description": "Capability for the folder compare window",
+  "windows": ["folder-compare"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:allow-close",
+    "opener:default",
+    "dialog:allow-open"
+  ]
+}

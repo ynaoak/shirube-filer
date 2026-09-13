@@ -1,0 +1,26 @@
+# Third-Party Licenses (Rust crates)
+
+このファイルは `cargo-about` により自動生成されます（手動編集しないでください）。
+shirube-filer は以下の Rust クレートを同梱しています。各ライセンスの全文を併記します。
+
+> libgit2（`libgit2-sys` が同梱する C ライブラリ）は GPLv2＋リンク例外で配布されます。
+> ソース: https://github.com/libgit2/libgit2 — 詳細は docs/development/oss-license-audit.md を参照。
+
+{{#each overview}}
+- **{{{name}}}**: {{count}} crate(s)
+{{/each}}
+
+---
+{{#each licenses}}
+## {{{name}}}
+
+使用クレート:
+{{#each used_by}}
+- {{crate.name}} {{crate.version}}{{#if crate.repository}} — {{crate.repository}}{{/if}}
+{{/each}}
+
+```
+{{license_text}}
+```
+
+{{/each}}

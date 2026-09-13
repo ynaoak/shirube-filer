@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "queue",
+  "description": "Capability for the operation queue window",
+  "windows": ["queue"],
+  "permissions": [
+    "core:default",
+    "core:event:default"
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "shirube-filer",
+  "version": "1.0.0",
+  "identifier": "com.shirube-filer",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build:msstore",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "shirube-filer",
+        "width": 800,
+        "height": 600,
+        "decorations": false
+      }
+    ],
+    "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "**"
+        ]
+      },
+      "csp": "default-src 'self'; script-src 'self' asset: https://asset.localhost 'unsafe-eval'; connect-src ipc: asset: https://ipc.localhost; img-src 'self' asset: https://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' asset: https://asset.localhost data:; media-src 'self' asset: https://asset.localhost blob:; object-src 'self' asset: https://asset.localhost; frame-src 'self' asset: https://asset.localhost; worker-src blob: 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {}
+  }
+}

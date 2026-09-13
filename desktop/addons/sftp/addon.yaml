@@ -1,0 +1,7 @@
+id: sftp
+name: SFTP
+version: "1.0.0"
+description: SSH/SFTP経由でリモートサーバーのファイルを閲覧・転送する
+author: shirube-filer contributors
+license: MIT
+entry_ui: ui/index.js

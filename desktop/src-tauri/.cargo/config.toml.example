@@ -1,0 +1,29 @@
+# Build-time OAuth client IDs for cloud add-ons.
+#
+# HOW TO USE
+#   1. Copy this file to `config.toml` in the same directory:
+#        cp .cargo/config.toml.example .cargo/config.toml   (run from apps/desktop/src-tauri/)
+#   2. Fill in your real client IDs below.
+#   3. Build as usual (`pnpm tauri build` / `make build-*`). Cargo applies [env]
+#      at compile time and `option_env!` bakes the values into the binary.
+#
+# NOTES
+#   - `.cargo/config.toml` is gitignored so your IDs are not committed.
+#   - These are read by `option_env!` in src/{gdrive,gcs,box,onedrive,dropbox}_commands.rs.
+#     Any var left unset falls back to the in-source placeholder.
+#   - Values are baked in at COMPILE time. After changing them, rebuild
+#     (run `cargo clean` first if a value seems stale).
+#   - Client IDs are public identifiers; Google/OneDrive/Dropbox use PKCE (no secret).
+#     Box does NOT support PKCE and requires the client secret for the token
+#     exchange, so SHIRUBE_BOX_CLIENT_SECRET must also be set. Keep this file
+#     out of version control (it is gitignored).
+#   - Alternative: export the same variables in your shell / CI instead of this file
+#     (e.g. GitHub Actions Secrets -> workflow `env:`).
+
+[env]
+SHIRUBE_GDRIVE_CLIENT_ID = "REPLACE_WITH_GDRIVE_CLIENT_ID.apps.googleusercontent.com"
+SHIRUBE_GCS_CLIENT_ID = "REPLACE_WITH_GCS_CLIENT_ID.apps.googleusercontent.com"
+SHIRUBE_BOX_CLIENT_ID = "REPLACE_WITH_BOX_CLIENT_ID"
+SHIRUBE_BOX_CLIENT_SECRET = "REPLACE_WITH_BOX_CLIENT_SECRET"
+SHIRUBE_ONEDRIVE_CLIENT_ID = "REPLACE_WITH_ONEDRIVE_CLIENT_ID"
+SHIRUBE_DROPBOX_APP_KEY = "REPLACE_WITH_DROPBOX_APP_KEY"

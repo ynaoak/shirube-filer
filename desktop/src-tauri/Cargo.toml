@@ -1,0 +1,117 @@
+[package]
+name = "shirube-filer"
+version = "1.0.0"
+description = "A cross-platform file manager"
+authors = []
+edition = "2021"
+# 非公開クレート（crates.io へは publish しない）。cargo-deny の private.ignore 対象。
+publish = false
+license = "PolyForm-Noncommercial-1.0.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "shirube_filer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+default = []
+# Mac App Store build: enables Security-Scoped Bookmarks, disables PTY (sandbox restriction)
+mas = ["dep:objc"]
+# Microsoft Store build: disables PTY and user-defined shell commands (Store policy)
+msstore = []
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+# Cargo.toml を読んでビルド/実行タスクを組み立てる（task_commands）
+toml = "0.9"
+quick-xml = { version = "0.37", features = ["serialize"] }
+zip = "2"
+tar = "0.4"
+flate2 = "1"
+zstd = "0.13"
+rayon = "1"
+memchr = "2"
+portable-pty = "0.8"
+jwalk = "0.8"
+once_cell = "1"
+git2 = { version = "0.19", features = ["vendored-libgit2"] }
+trash = "5"
+# MAS-only: Security-Scoped Bookmarks via Objective-C runtime
+objc = { version = "0.2", optional = true }
+base64 = "0.22"
+tauri-plugin-dialog = "2.7.0"
+tauri-plugin-deep-link = "2"
+# deep-link feature: 2つ目のインスタンスに渡された shirube-filer:// URL を
+# 実行中インスタンスの on_open_url へ転送する（Windows/Linux で必須）
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+notify = "6"
+md-5 = "0.10"
+sha2 = "0.10"
+russh = "0.46"
+russh-sftp = "2"
+russh-keys = "0.46"
+async-trait = "0.1"
+tokio = { version = "1", features = ["io-util", "net", "time", "sync"] }
+aws-sdk-s3 = "1"
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+sysinfo = { version = "0.31", default-features = false, features = ["disk"] }
+kamadak-exif = "0.6"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+httpdate = "1"
+getrandom = "0.2"
+raw-window-handle = "0.6"
+# OS ネイティブの資格情報ストア（Win: Credential Manager / macOS: Keychain /
+# Linux: secret-service or keyutils）。クラウド同期のシークレット保管に使用。
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+tauri-plugin-window-state = "2"
+tauri-plugin-drag = "2.1.1"
+# Direct 配布版の自動アップデート（GitHub Releases の latest.json を署名検証して適用）。
+# ストア版（mas / msstore）ではプラグインを登録しない（lib.rs の setup 参照）。
+# process はインストール後の relaunch() 用。
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# /proc/self/mountinfo を poll() でイベント待機し、ドライブ抜き差しを検出する。
+libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# trash クレートの os_limited（ゴミ箱の列挙・復元・完全削除）は macOS 非対応
+# （trash 5.x で cfg アウトされる）。macOS では ~/.Trash を直接扱い、元の場所は
+# Finder が付与する拡張属性 com.apple.metadata:_kMDItemDeleteWhereFrom
+# （バイナリ plist の文字列配列）から復元する。
+xattr = "1"
+plist = "1"
+
+[target.'cfg(windows)'.dependencies]
+# OS クリップボードのファイルリスト連携（CF_HDROP + Preferred DropEffect）。
+# エクスプローラーでコピー/カットしたファイルの貼り付け、およびその逆方向に使う。
+clipboard-win = "5"
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Devices_PortableDevices",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Registry",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+# ゴミ箱移動の進捗シンク（IFileOperationProgressSink）を実装するために必要。
+# windows::core::implement が展開するコードが ::windows_core を直接参照するため、
+# windows クレート経由ではなく直接の依存として持つ必要がある。
+windows-core = "0.61"
+
