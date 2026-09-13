@@ -1,0 +1,7 @@
+id: webdav
+name: WebDAV
+version: "1.0.0"
+description: WebDAV経由でリモートサーバー（Nextcloud / ownCloud / Synology NAS など）のファイルを閲覧・転送する
+author: shirube-filer contributors
+license: MIT
+entry_ui: ui/index.js

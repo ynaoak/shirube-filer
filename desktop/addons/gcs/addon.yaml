@@ -1,0 +1,7 @@
+id: gcs
+name: Google Cloud Storage
+version: "1.0.0"
+description: Google Cloud Storage のバケット・オブジェクトを閲覧・転送する（OAuth 2.0 PKCE 認証）
+author: shirube-filer contributors
+license: MIT
+entry_ui: ui/index.js

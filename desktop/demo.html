@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shirube-Filer — Demo</title>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <!--
+      LP スクリーンショット用デモモード。
+      Tauri を起動せず、ブラウザだけで実際の UI をサンプルデータ入りで表示する。
+      使い方: `pnpm dev` で vite を起動し http://localhost:1420/demo.html を開く。
+      サンプル値の変更は src/demo/sampleData.ts を編集（vite が即時リロード）。
+      このファイルは vite build の対象外のため、製品ビルドには含まれない。
+    -->
+    <script type="module" src="/src/demo/main.ts"></script>
+  </body>
+</html>

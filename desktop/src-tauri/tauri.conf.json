@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "shirube-filer",
+  "version": "1.0.0",
+  "identifier": "com.shirube-filer",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Shirube-Filer",
+        "width": 800,
+        "height": 600,
+        "decorations": false,
+        "visible": false,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "**"
+        ]
+      },
+      "csp": "default-src 'self'; script-src 'self' asset: http://asset.localhost https://asset.localhost 'unsafe-eval'; connect-src ipc: http://ipc.localhost https://ipc.localhost asset: http://asset.localhost https://asset.localhost; img-src 'self' asset: http://asset.localhost https://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' asset: http://asset.localhost https://asset.localhost data:; media-src 'self' asset: http://asset.localhost https://asset.localhost blob:; object-src 'self' asset: http://asset.localhost https://asset.localhost; frame-src 'self' asset: http://asset.localhost https://asset.localhost; worker-src blob: 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installerHooks": "installerHooks.nsh"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQwMjhFODkxQjYwMThGMjIKUldRaWp3RzJrZWdvMFBzeXE3eU55b0ZNdzFPdmUxRGJ5UnFQSmlyQW1TSjN0czRGY2tmalZ4NDIK",
+      "endpoints": [
+        "https://github.com/ynaoak/shirube-filer/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "shirube-filer"
+        ]
+      }
+    }
+  }
+}

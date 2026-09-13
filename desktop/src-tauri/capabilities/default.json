@@ -1,0 +1,30 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window and torn-off tab windows (main-*)",
+  "windows": [
+    "main",
+    "main-*"
+  ],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:event:allow-emit-to",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "core:window:allow-inner-position",
+    "core:window:allow-scale-factor",
+    "opener:default",
+    "dialog:allow-open",
+    "drag:default",
+    "updater:default",
+    "process:allow-restart"
+  ]
+}
