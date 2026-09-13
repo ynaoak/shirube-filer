@@ -63,8 +63,7 @@ jobs:
           set -euo pipefail
           id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
           if [ -z "$id" ]; then
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
-              --title "shirube-filer $TAG" --notes-file - <<'EOF'
+            cat > notes.md <<'EOF'
           お使いの OS に合ったファイルをダウンロードしてください。インストーラ版はアプリ内から自動アップデートできます。
 
           | OS | ファイル | 用途 |
@@ -78,8 +77,15 @@ jobs:
 
           コード署名をしていないため、初回起動時に OS の警告が出ることがあります。
           EOF
-            id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
+            # 作成直後の一覧 API にはまだ出てこないことがあるので、作成 API の応答から ID を取る
+            id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$TAG" -f name="shirube-filer $TAG" -F body=@notes.md -F draft=true --jq .id)
           fi
+          if [ -z "$id" ]; then
+            echo "::error::could not determine the release id for $TAG"
+            exit 1
+          fi
+          echo "release id: $id"
           echo "id=$id" >> "$GITHUB_OUTPUT"
 
   build:
@@ -96,9 +102,11 @@ jobs:
           - os: macos-latest
             rustTarget: aarch64-apple-darwin
             args: "--target aarch64-apple-darwin"
-          - os: macos-latest
-            rustTarget: x86_64-apple-darwin
-            args: "--target x86_64-apple-darwin"
+          # Intel はネイティブランナーで作る（arm ランナーからのクロスビルドは
+          # git2 が使う openssl-sys が x86_64 用 OpenSSL を見つけられず失敗する）
+          - os: macos-15-intel
+            rustTarget: ""
+            args: ""
           - os: ubuntu-22.04
             rustTarget: ""
             args: ""
@@ -107,6 +115,17 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ env.TAG }}
+
+      # ID が無いと tauri-action はビルドだけして何も添付しない（無言で成功する）
+      - name: Check release id
+        shell: bash
+        env:
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          if [ -z "$RELEASE_ID" ]; then
+            echo "::error::release id from create-release is empty"
+            exit 1
+          fi
 
       # Tauri v2 のシステム依存（WebKitGTK 4.1 / D-Bus 等）
       - name: Install Linux dependencies
